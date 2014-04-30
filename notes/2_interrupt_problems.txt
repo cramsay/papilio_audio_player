@@ -1,0 +1,10 @@
+Using myFile.read in ISR worked for a few seconds (consistiently).
+Then it would block and only forcing TMRINTER to low would resume.
+Some digging revealed that this was because the way the SD card is
+used. AFAIK, blocks of data are read from the sD card at once (i.e. many bytes)
+- this takes 1-2 ms. Then the read() function can return the cached bytes from the
+previous call.
+The initial block is fetched when skipping past the first 80 bytes in setup().
+When the next block is fetched, the interrupt stalls.
+So, I need something like a queue of samples which is pre-emptively loaded outside
+the interrupt.

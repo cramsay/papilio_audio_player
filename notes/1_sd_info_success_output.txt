@@ -1,0 +1,9 @@
+Starting Card Info:
+Card type: SDHC
+
+Volume type is FAT32
+
+Volume size (bytes): 2814377984
+Volume size (Kbytes): 2748416
+Volume size (Mbytes): 2684
+Card Info complete, waiting 5 seconds.
