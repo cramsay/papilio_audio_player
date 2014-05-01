@@ -24,6 +24,8 @@
 #define SMPL_FREQ 32000
 //Number of samples to hold in buffer
 #define SMPL_BUF 360
+//Name (and path) of wav file
+#define TRACK_NAME "track.wav"
 
 File myFile;
 QueueArray<unsigned char> samples;
@@ -117,16 +119,16 @@ void setup()
   
   if(init_sd()){
       // Open the file for reading:
-      myFile = SD.open("track.wav");
+      myFile = SD.open(TRACK_NAME);
   
      // Waste first 80 bytes (header data - not interested during initial testing)
      if (myFile) {
       for(int i=0;i<120;i++)
         myFile.read();
-   }
+     }
    
-   //Fill buffer before starting interrupts
-    while(samples.count()<SMPL_BUF&&myFile.available())
+     //Fill buffer before starting interrupts
+     while(samples.count()<SMPL_BUF&&myFile.available())
         samples.enqueue(myFile.read());
   }
   
