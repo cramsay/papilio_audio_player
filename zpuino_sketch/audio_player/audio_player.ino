@@ -1,13 +1,15 @@
 /*
   Sketch to read a .wav from an SD card, parse the PCM values and drive an output using a delta-sigma DAC.
   
-  Requires a system with a ZPUino softcore processor with SPI, Delta-Sigma DAC, and timer control (such as the Hyperion variant
-  http://papilio.gadgetfactory.net/index.php?n=Papilio.Hyperion).
+  Requires a system with a ZPUino softcore processor with SPI, Delta-Sigma DAC, and timer control - the vanilla variant
+  should suffice. Might want to check SD card functionality using SD.h examples before running this.
+  The hyperion variant works well but sketch space is limited on the Papilio one 500k.
   
   For all the ZPU reg names see http://www.alvie.com/zpuino/downloads/zpuino-1.0.pdf
  */
  
 #include <SD.h>
+#include <QueueArray.h> //Remember to add library through IDE (Sketch->Import Library->Add Library then add libs/QueueArray)
 
 //SD sard pin definitions 
 #define CSPIN  WING_A_4
@@ -19,6 +21,7 @@
 #define SDCH0  WING_C_0
 
 File myFile;
+QueueArray<unsigned char> samples;
 
 /* Interrupt handler:
  * Processes a single PCM smaple from the wav file
@@ -27,10 +30,9 @@ void _zpu_interrupt ()
 {
   if ( TMR0CTL & _BV(TCTLIF))
   {
-     if (myFile&&myFile.available()) {
+     if (!samples.isEmpty()) {
       //Process sample
-      unsigned char sample = myFile.read();
-      SIGMADELTADATA = sample<<7;
+      SIGMADELTADATA = samples.dequeue()<<8;
     }
     
     /* Clear the interrupt flag on timer register */
@@ -84,15 +86,15 @@ int init_sd()
 }
 
 /* Initializes the ZPU interrupt registers
- * to provide an acurate 8 kHz sample processing interrupt
+ * to provide an acurate 11 kHz sample processing interrupt
  */
 void init_interrupts()
 {
   // Clear timer counter.
   TMR0CNT = 0;
  
-  // Timer frequency = 8000
-  unsigned frequency = 8000;
+  // Timer frequency = 11000
+  unsigned frequency = 11000;
   TMR0CMP = ( (CLK_FREQ) / frequency ) - 1;
   TMR0CTL = _BV(TCTLENA)| _BV(TCTLCCM)| _BV(TCTLDIR)| _BV(TCTLIEN);
  
@@ -105,7 +107,7 @@ void setup()
 {
  // Open serial communications and wait for port to open:
   Serial.begin(9600);
-  
+  delay(2000);
   init_dac();
   
   if(init_sd()){
@@ -124,5 +126,8 @@ void setup()
 
 void loop()
 {
+  if(samples.count()<80)
+    if(myFile&&myFile.available())
+      samples.enqueue(myFile.read());
 }
 
