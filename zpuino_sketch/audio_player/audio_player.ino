@@ -20,6 +20,11 @@
 //Sigma-delta ADC pin definitions
 #define SDCH0  WING_C_0
 
+//Define sample frequency of wav file (read this from metadata eventually...)
+#define SMPL_FREQ 32000
+//Number of samples to hold in buffer
+#define SMPL_BUF 360
+
 File myFile;
 QueueArray<unsigned char> samples;
 
@@ -93,8 +98,8 @@ void init_interrupts()
   // Clear timer counter.
   TMR0CNT = 0;
  
-  // Timer frequency = 11000
-  unsigned frequency = 11000;
+  // Set timer frequency
+  unsigned frequency = SMPL_FREQ;
   TMR0CMP = ( (CLK_FREQ) / frequency ) - 1;
   TMR0CTL = _BV(TCTLENA)| _BV(TCTLCCM)| _BV(TCTLDIR)| _BV(TCTLIEN);
  
@@ -116,9 +121,13 @@ void setup()
   
      // Waste first 80 bytes (header data - not interested during initial testing)
      if (myFile) {
-      for(int i=0;i<80;i++)
+      for(int i=0;i<120;i++)
         myFile.read();
    }
+   
+   //Fill buffer before starting interrupts
+    while(samples.count()<SMPL_BUF&&myFile.available())
+        samples.enqueue(myFile.read());
   }
   
   init_interrupts();
@@ -126,7 +135,8 @@ void setup()
 
 void loop()
 {
-  if(samples.count()<80)
+  //Keep sample buffer as full as possible
+  if(samples.count()<SMPL_BUF)
     if(myFile&&myFile.available())
       samples.enqueue(myFile.read());
 }
