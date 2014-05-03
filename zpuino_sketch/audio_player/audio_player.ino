@@ -8,6 +8,7 @@
   For all the ZPU reg names see http://www.alvie.com/zpuino/downloads/zpuino-1.0.pdf
  */
  
+//#include <stdint.h>
 #include <SD.h>
 #include <QueueArray.h> //Remember to add library through IDE (Sketch->Import Library->Add Library then add libs/QueueArray)
 
@@ -17,18 +18,20 @@
 #define SCKPIN WING_A_2
 #define SDOPIN WING_A_1
 
-//Sigma-delta ADC pin definitions
+//Sigma-delta DAC pins, PPS and register definitions
 #define SDCH0  WING_C_0
+#define DAC_PPS_NUM 7
+#define DAC_DATA REGISTER(IO_SLOT(8),0)
 
 //Define sample frequency of wav file (read this from metadata eventually...)
 #define SMPL_FREQ 32000
 //Number of samples to hold in buffer
-#define SMPL_BUF 360
+#define SMPL_BUF 960
 //Name (and path) of wav file
 #define TRACK_NAME "track.wav"
 
-File myFile;
-QueueArray<unsigned char> samples;
+File sdFile;
+QueueArray<uint16_t> samples;
 
 /* Interrupt handler:
  * Processes a single PCM smaple from the wav file
@@ -37,9 +40,12 @@ void _zpu_interrupt ()
 {
   if ( TMR0CTL & _BV(TCTLIF))
   {
+    
+     //8 bit unsigned example
      if (!samples.isEmpty()) {
       //Process sample
-      SIGMADELTADATA = samples.dequeue()<<8;
+      DAC_DATA = samples.dequeue();//#CST
+      //Serial.println("in interrupt");
     }
     
     /* Clear the interrupt flag on timer register */
@@ -50,14 +56,9 @@ void _zpu_interrupt ()
 // Setup for sigma-delta DAC (wishbone peripheral)
 void init_dac()
 {
-  // Configure pin as output
    pinMode (SDCH0 , OUTPUT );
-   // enable PPS on this pin
    pinModePPS (SDCH0 , HIGH );
-   // Map SigmaDelta channel 1 to pin 30
-   outputPinForFunction (SDCH0 , IOPIN_SIGMADELTA0 );
-   //Enable only channel 0
-   SIGMADELTACTL = 0x01;
+   outputPinForFunction (SDCH0 , DAC_PPS_NUM);
 }
 
 /* Setup for SD card using SPI (See SD.h examples)
@@ -93,7 +94,7 @@ int init_sd()
 }
 
 /* Initializes the ZPU interrupt registers
- * to provide an acurate 11 kHz sample processing interrupt
+ * to provide an acurate PCM request interrupt
  */
 void init_interrupts()
 {
@@ -110,6 +111,13 @@ void init_interrupts()
   INTRCTL = 1;
 }
 
+inline void enqueue_sample(){
+  //uint16_t sample = sdFile.read()|(sdFile.read()<<8);
+  uint16_t sample = (sdFile.read());
+  //sample += 32768; try to map to all positive numbers
+  samples.enqueue(sample);
+}
+  
 void setup()
 {
  // Open serial communications and wait for port to open:
@@ -119,17 +127,20 @@ void setup()
   
   if(init_sd()){
       // Open the file for reading:
-      myFile = SD.open(TRACK_NAME);
+      sdFile = SD.open(TRACK_NAME);
   
      // Waste first 80 bytes (header data - not interested during initial testing)
-     if (myFile) {
-      for(int i=0;i<120;i++)
-        myFile.read();
-     }
+     if (sdFile) {
+       Serial.println("Opened file fine");
+        for(int i=0;i<80;i++)
+          sdFile.read();
    
-     //Fill buffer before starting interrupts
-     while(samples.count()<SMPL_BUF&&myFile.available())
-        samples.enqueue(myFile.read());
+       //Fill buffer before starting interrupts
+       while(samples.count()<SMPL_BUF&&sdFile.available())
+          enqueue_sample();
+       
+       Serial.println("Filled queue");
+     }
   }
   
   init_interrupts();
@@ -137,9 +148,10 @@ void setup()
 
 void loop()
 {
+  //delay(100);
   //Keep sample buffer as full as possible
   if(samples.count()<SMPL_BUF)
-    if(myFile&&myFile.available())
-      samples.enqueue(myFile.read());
+    if(sdFile&&sdFile.available())
+      enqueue_sample();
 }
 

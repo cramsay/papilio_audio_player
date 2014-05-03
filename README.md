@@ -11,6 +11,7 @@ As it stands the hardware is simply a micro-SD card using SPI and a single speak
 * **A4** - SD CS
 * **C0** - Speaker signal
 
+This system uses a [custom zpuino core](https://github.com/cramsay/papilio_audio_player/blob/master/bitfiles/zpuino_papilio_one_500k_custom.bit) with a FIFO buffered DAC (eventually).
 If you're not familiar with the ZPUino/Papilio process, you need to use the papilio-loader to get the zpuino core bitfile into **SPI flash** (it will _not_ work if sent straight to the FPGA) then use the ZAP IDE to "upload" the sketch. 
 The sketch can be found at [/zpuino_sketch/audio_player/audio_player.ino](https://github.com/cramsay/papilio_audio_player/blob/master/zpuino_sketch/audio_player/audio_player.ino)
 
@@ -25,9 +26,12 @@ code space. Do this by removing the line "#define SD_WRITE_SUPPORT" from
 zap/hardware/zpuino/zpu/cores/zpuino/board_papilio_one.h . If process changes you can
 probably find it at http://papilio.cc/index.php?n=Papilio.SD.
 
-### Vanilla variant can't read my SD card?
-Yeah... me neither actually. I had a poke about in the hdl and didn't find anything obviously
-out of place. The DAC, SPI, and timers are all where they should be. ~~I noticed the label
-for the SPI instance was a little strange (SLOT1 when it's in the 6th slot...). Changing the label
-to SLOT6 magically made it all fine!~~ Building the vanilla variant from the github [repo](https://github.com/alvieboy/ZPUino-HDL) under linux seems to work. I've provided a zpuino core bitfile which works (for me) in
-the /bitfiles folder.
+### Can't recompile the ZPUino core!
+It should be done (on linux) by running the make file in the boards/papilio_one/s3e500 dir.
+One major pitfall I found here was the build failing almost immediately with something like
+"zpu-elf-g++ : command not found". This is referencing the gcc compiler for our ZPU sketches
+and it can't find it anywhere! For me, I had just downloaded the ZAP IDE and was happy enough
+to run it out of my downloads folder but for the makefile to work you _must_ add the ZAP IDE's
+hardware/tools/zpu/bin to your path variable. E.g.
+>export PATH=$PATH:/some/path/to/papilio-zap-ide/hardware/tools/zpu/bin
+Then try a "make clean" and "make" :)
