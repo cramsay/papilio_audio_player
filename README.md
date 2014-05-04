@@ -19,7 +19,7 @@ The sketch can be found at [/zpuino_sketch/audio_player/audio_player.ino](https:
 
 ### Building the custom ZPUino core
 You don't _have_ to do this - the bitfile for the 500k board is in the bitfiles folder.
-However, it isn't too hard to do so. Just run the makefile in the board directory
+However, it isn't too hard to do so. Just run the makefile in the zpuino-hdl directory
 "...boards/papilio_one/s3e500" to generate the bitfile. You can even just type "make flash"
 to flash the bitfile to your board straight away (if you have papilio-progs installed).
 

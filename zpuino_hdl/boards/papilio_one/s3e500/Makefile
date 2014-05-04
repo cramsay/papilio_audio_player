@@ -37,5 +37,3 @@ ${PROJECT}_routed.bin: ${PROJECT}_routed.bit
 clean:
 	@rm -rf ${PROJECT}.{ngc,ngd,ncd,_routed.ncd,pcf,bit,_routed.bit} prom-generic-dp-32.vhd
 	$(MAKE) -C ../../../bootloader clean
-flash:
-	papilio-prog -v -f papilio_one_routed.bit -b ~/Documents/Programming/Papilio/papilio-zap-ide/hardware/tools/papilio/bscan_spi_xc3s500e.bit -sa -r
