@@ -51,6 +51,12 @@ xst
 webtalk.log
 
 planahead/
+
+#Ctags
+*tags
+
+*.build
+
 #################
 ## Eclipse
 #################
