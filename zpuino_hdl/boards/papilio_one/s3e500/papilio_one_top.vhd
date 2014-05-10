@@ -68,7 +68,7 @@ end entity papilio_one_top;
 
 architecture behave of papilio_one_top is
 
-  component my_sigmadelta is
+  component buffered_sigmadelta is
   port (
     wb_clk_i: in std_logic;
     wb_rst_i: in std_logic;
@@ -84,7 +84,7 @@ architecture behave of papilio_one_top is
     -- Connection to GPIO pin
     pcm_out: out std_logic_vector(1 downto 0)
   );
-  end component my_sigmadelta;
+  end component buffered_sigmadelta;
 
   component clkgen is
   port (
@@ -523,7 +523,7 @@ begin
   -- IO SLOT 8 (optional)
   --
 
-  mysigdelta_inst: my_sigmadelta
+  mysigdelta_inst: buffered_sigmadelta
   port map (
     wb_clk_i       => wb_clk_i,
     wb_rst_i    => wb_rst_i,

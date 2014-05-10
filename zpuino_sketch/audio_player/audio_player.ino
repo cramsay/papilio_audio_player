@@ -21,12 +21,18 @@
 #define DAC_DATA REGISTER(IO_SLOT(DAC_B),0)
 #define DAC_CTRL REGISTER(IO_SLOT(DAC_B),1)
 
-//Define sample frequency of wav file (read this from metadata eventually...)
-#define SMPL_FREQ 44100
-//Name (and path) of wav file
-#define TRACK_NAME "track44r.wav"
+//DAC control options
+#define DAC_OP_isFULL 0x1
+#define DAC_OP_is16W 0x2
+#define DAC_OP_isBIGEND 0x4
+#define DAC_OP_isSIGNED 0x8
 
 File sdFile;
+
+//Audio file definitions
+unsigned int sample_freq = 16000;
+char wav_file[512] = "t1616.wav";
+int sample_is16bit = 1;
 
 /* Interrupt handler:
  * Called by the HDL audio buffer drops below 50% full
@@ -34,8 +40,14 @@ File sdFile;
 void _zpu_interrupt ()
 {
    //While buffer isn't full, pass another sample
-    while(!DAC_CTRL)
-      DAC_DATA = sdFile.read();
+    while(!(DAC_CTRL&1)){
+      
+      int16_t sample = sdFile.read();
+      if(sample_is16bit)
+        sample |= sdFile.read()<<8;
+        
+      DAC_DATA = sample;
+    }
 }
 
 // Setup for sigma-delta DAC (wishbone peripheral)
@@ -47,8 +59,13 @@ void init_dac()
    outputPinForFunction (SDCH0 , DAC_PPS_NUM);
    
    //Set sample frequency of the DAC
-   unsigned frequency = SMPL_FREQ;
-   DAC_CTRL = ( (CLK_FREQ) / frequency ) - 1; // Set to sampling frequency
+   unsigned frequency = sample_freq;
+   uint32_t ctrl_reg =( ( (CLK_FREQ) / frequency ) - 1 )<<16;
+   ctrl_reg |= DAC_OP_isBIGEND;
+   if(sample_is16bit)
+     ctrl_reg |= DAC_OP_is16W | DAC_OP_isSIGNED;
+   
+   DAC_CTRL = ctrl_reg; // Set to sampling frequency
 }
 
 /* Setup for SD card using SPI (See SD.h examples)
@@ -98,11 +115,10 @@ void setup()
  // Open serial communications and wait for port to open:
   Serial.begin(9600);
   delay(2000);
-  init_dac();
   
   if(init_sd()){
       // Open the file for reading:
-      sdFile = SD.open(TRACK_NAME);
+      sdFile = SD.open(wav_file);
   
      if (sdFile) {
        Serial.println("Opened file fine");
@@ -117,6 +133,10 @@ void setup()
      }
   }
   
+  /* Init buffered DAC peripheral
+     This is done after reading wav file header as encoding types effect options sent with
+     dac init */
+  init_dac();
   //Enable interrupts and start playing.
   init_interrupts();
 }

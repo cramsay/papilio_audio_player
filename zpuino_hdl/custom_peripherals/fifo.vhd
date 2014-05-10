@@ -8,15 +8,16 @@ use IEEE.std_logic_unsigned.all;
 
 entity fifo_buf is
   generic (
-    bits: integer := 11
+    bits: integer := 11;
+    width: integer:= 16
   );
   port (
     clk:      in std_logic;
     rst:      in std_logic;
     wr:       in std_logic;
     rd:       in std_logic;
-    write:    in std_logic_vector(7 downto 0);
-    read :    out std_logic_vector(7 downto 0);
+    write:    in std_logic_vector(width-1 downto 0);
+    read :    out std_logic_vector(width-1 downto 0);
     full:     out std_logic;
     refil:     out std_logic;
     empty:    out std_logic
@@ -25,7 +26,7 @@ end entity fifo_buf;
 
 architecture behave of fifo_buf is
 
-  type mem_t is array (0 to ((2**bits)-1)) of std_logic_vector(7 downto 0);
+  type mem_t is array (0 to ((2**bits)-1)) of std_logic_vector(width-1 downto 0);
 
   signal memory:  mem_t :=(others=>(others=>'0'));
 
