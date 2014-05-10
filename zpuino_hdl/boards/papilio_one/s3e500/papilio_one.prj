@@ -1,5 +1,6 @@
 vhdl work "clkgen.vhd"
 vhdl work "../../../custom_peripherals/my_sigmadelta.vhd"
+vhdl work "../../../custom_peripherals/fifo.vhd"
 vhdl work "../../../dualport_ram.vhd"
 vhdl work "../../../fifo.vhd"
 vhdl work "../../../jtag_chain.vhd"

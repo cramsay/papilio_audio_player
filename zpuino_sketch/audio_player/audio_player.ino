@@ -1,16 +1,12 @@
 /*
   Sketch to read a .wav from an SD card, parse the PCM values and drive an output using a delta-sigma DAC.
   
-  Requires a system with a ZPUino softcore processor with SPI, Delta-Sigma DAC, and timer control - the vanilla variant
-  should suffice. Might want to check SD card functionality using SD.h examples before running this.
-  The hyperion variant works well but sketch space is limited on the Papilio one 500k.
+  Requires a system a custom ZPUino variant (included in the git repo)
   
   For all the ZPU reg names see http://www.alvie.com/zpuino/downloads/zpuino-1.0.pdf
  */
  
-//#include <stdint.h>
 #include <SD.h>
-#include <QueueArray.h> //Remember to add library through IDE (Sketch->Import Library->Add Library then add libs/QueueArray)
 
 //SD sard pin definitions 
 #define CSPIN  WING_A_4
@@ -21,44 +17,38 @@
 //Sigma-delta DAC pins, PPS and register definitions
 #define SDCH0  WING_C_0
 #define DAC_PPS_NUM 7
-#define DAC_DATA REGISTER(IO_SLOT(8),0)
+#define DAC_B 8
+#define DAC_DATA REGISTER(IO_SLOT(DAC_B),0)
+#define DAC_CTRL REGISTER(IO_SLOT(DAC_B),1)
 
 //Define sample frequency of wav file (read this from metadata eventually...)
-#define SMPL_FREQ 32000
-//Number of samples to hold in buffer
-#define SMPL_BUF 960
+#define SMPL_FREQ 44100
 //Name (and path) of wav file
-#define TRACK_NAME "track.wav"
+#define TRACK_NAME "track44r.wav"
 
 File sdFile;
-QueueArray<uint16_t> samples;
 
 /* Interrupt handler:
- * Processes a single PCM smaple from the wav file
+ * Called by the HDL audio buffer drops below 50% full
  */
 void _zpu_interrupt ()
 {
-  if ( TMR0CTL & _BV(TCTLIF))
-  {
-    
-     //8 bit unsigned example
-     if (!samples.isEmpty()) {
-      //Process sample
-      DAC_DATA = samples.dequeue();//#CST
-      //Serial.println("in interrupt");
-    }
-    
-    /* Clear the interrupt flag on timer register */
-    TMR0CTL &= ~_BV(TCTLIF);
-  }
+   //While buffer isn't full, pass another sample
+    while(!DAC_CTRL)
+      DAC_DATA = sdFile.read();
 }
 
 // Setup for sigma-delta DAC (wishbone peripheral)
 void init_dac()
 {
+   //Set up PPS for DAC peripheral
    pinMode (SDCH0 , OUTPUT );
    pinModePPS (SDCH0 , HIGH );
    outputPinForFunction (SDCH0 , DAC_PPS_NUM);
+   
+   //Set sample frequency of the DAC
+   unsigned frequency = SMPL_FREQ;
+   DAC_CTRL = ( (CLK_FREQ) / frequency ) - 1; // Set to sampling frequency
 }
 
 /* Setup for SD card using SPI (See SD.h examples)
@@ -98,24 +88,9 @@ int init_sd()
  */
 void init_interrupts()
 {
-  // Clear timer counter.
-  TMR0CNT = 0;
- 
-  // Set timer frequency
-  unsigned frequency = SMPL_FREQ;
-  TMR0CMP = ( (CLK_FREQ) / frequency ) - 1;
-  TMR0CTL = _BV(TCTLENA)| _BV(TCTLCCM)| _BV(TCTLDIR)| _BV(TCTLIEN);
- 
-  // Enable timer 0 interrupt then globally enable interrupts
-  INTRMASK = _BV(INTRLINE_TIMER0);
+  // Enable buffered dac's interrupt then globally enable interrupts
+  INTRMASK = _BV(DAC_B);
   INTRCTL = 1;
-}
-
-inline void enqueue_sample(){
-  //uint16_t sample = sdFile.read()|(sdFile.read()<<8);
-  uint16_t sample = (sdFile.read());
-  //sample += 32768; try to map to all positive numbers
-  samples.enqueue(sample);
 }
   
 void setup()
@@ -129,29 +104,24 @@ void setup()
       // Open the file for reading:
       sdFile = SD.open(TRACK_NAME);
   
-     // Waste first 80 bytes (header data - not interested during initial testing)
      if (sdFile) {
        Serial.println("Opened file fine");
+        
+        // Waste first 80 bytes (header data - not interested during initial testing)
         for(int i=0;i<80;i++)
           sdFile.read();
-   
-       //Fill buffer before starting interrupts
-       while(samples.count()<SMPL_BUF&&sdFile.available())
-          enqueue_sample();
        
-       Serial.println("Filled queue");
+       //Fill the buffer before we start 
+       _zpu_interrupt();
+       Serial.println("Done pre-filling");
      }
   }
   
+  //Enable interrupts and start playing.
   init_interrupts();
 }
 
 void loop()
 {
-  //delay(100);
-  //Keep sample buffer as full as possible
-  if(samples.count()<SMPL_BUF)
-    if(sdFile&&sdFile.available())
-      enqueue_sample();
 }
 

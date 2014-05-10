@@ -11,7 +11,7 @@ As it stands the external hardware is simply a micro-SD card using SPI and a sin
 * **A4** - SD CS
 * **C0** - Speaker signal
 
-This system uses a [custom zpuino core](https://github.com/cramsay/papilio_audio_player/blob/master/bitfiles/zpuino_papilio_one_500k_custom.bit) with a FIFO buffered DAC (eventually).
+This system uses a [custom zpuino core](https://github.com/cramsay/papilio_audio_player/blob/master/bitfiles/zpuino_papilio_one_500k_custom.bit) with a FIFO buffered DAC.
 If you're not familiar with the ZPUino/Papilio process, you need to use the papilio-loader to get the zpuino core bitfile into **SPI flash** (it will _not_ work if sent straight to the FPGA) then use the ZAP IDE to "upload" the sketch. 
 The sketch can be found at [/zpuino_sketch/audio_player/audio_player.ino](https://github.com/cramsay/papilio_audio_player/blob/master/zpuino_sketch/audio_player/audio_player.ino)
 
