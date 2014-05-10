@@ -23,27 +23,41 @@ However, it isn't too hard to do so. Just run the makefile in the zpuino-hdl dir
 "...boards/papilio_one/s3e500" to generate the bitfile. You can even just type "make flash"
 to flash the bitfile to your board straight away (if you have papilio-progs installed).
 
+## Details of the custom ZPUino core
+There is one custom wishbone-compatible peripheral - a buffered DAC which sends an interrupt to the software
+to provide more samples when the buffer falls below 50% full. It has HDL level settings which are exposed 
+through the DAC_CTRL register. These include sample rate, sample width (8 or 16 bits), sample endian-ness
+and a flag for signed (2's complement) samples. The register is structured like so (bit numbers are in brackets)...  
+|(31) sample_timer (16)|(15) N/A (4)| signed (3)| endian (2)| width (1)| full (0)|
+
+ * **sample_time**
+   * 16 bits - sets how many clock cycles are elapsed before switching to the next sample (determines sample rate)
+ * **N/A**
+   * Completely useless. Doesn't control anything as of yet.
+ * **signed**
+   * 1 bit - 0=samples are unsigned, 1=samples are signed using 2's copmlement
+ * **endian**
+   * 1 bit - 0=samples are little endian, 1=samples are big endian
+ * **width**
+   * 1 bit - 0=samples are 8 bits wide, 1=samples are 16 bits wide
+ * **full**
+   * 1 bit (read only) - 1 when sample buffer is full 
+
 ## Troubleshooting
-### I need less bits!
-When I was first testing this, I was running very tight (99% of sketch space used!) on space.
-So, here are a few quick and easy fixes... 
-
-1. If you're using the Hyperion zpuino variant as the SD examples suggest... well, don't.
-   The v1.0 vanilla variant seems to have SPI and delta-sigma wishbone peripherals, and more
-   importantly, it doesn't have the VGA support (more space for our code).
-
-2. Another trick is that we can disable SD card write functionality and save around 2KB of
-   code space. Do this by removing the line "#define SD_WRITE_SUPPORT" from
-   zap/hardware/zpuino/zpu/cores/zpuino/board_papilio_one.h . If process changes you can
-   probably find it at http://papilio.cc/index.php?n=Papilio.SD.
+### SD.h library uses lots of space!
+When I was first testing this (using a different soft processor), I was running very tight (99% of sketch space used!) on space.
+We can disable SD card write functionality and save around 2KB of
+code space. Do this by removing the line "#define SD_WRITE_SUPPORT" from
+zap/hardware/zpuino/zpu/cores/zpuino/board_papilio_one.h . If process changes you can
+probably find it at http://papilio.cc/index.php?n=Papilio.SD.
 
 ### Can't recompile the ZPUino core!
-It should be done (on linux) by running the make file in the boards/papilio_one/s3e500 dir.
-One major pitfall I found here was the build failing almost immediately with something like
+It should be done (on linux) by running the make file in the zpuino_hdl dir.
+One major pitfall is when the build fails almost immediately with something like
 "zpu-elf-g++ : command not found". This is referencing the gcc compiler for our ZPU sketches
 and it can't find it anywhere! For me, I had just downloaded the ZAP IDE and was happy enough
 to run it out of my downloads folder but for the makefile to work you _must_ add the ZAP IDE's
 hardware/tools/zpu/bin to your path variable. E.g.
->export PATH=$PATH:/some/path/to/papilio-zap-ide/hardware/tools/zpu/bin  
+```export PATH=$PATH:/some/path/to/papilio-zap-ide/hardware/tools/zpu/bin```
 
 Then try a "make clean" and "make" :)
