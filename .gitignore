@@ -1,4 +1,7 @@
-### Xilinx Stuff ####
+### ZAP IDE libs ###
+zpuino_sketch/libraries/readme.txt
+
+### Xilinx Stuff ###
 *.map
 *.mrp
 *.ngm

@@ -8,6 +8,8 @@
  
 #include <SD.h>
 
+#define DEBUG
+
 //SD sard pin definitions 
 #define CSPIN  WING_A_4
 #define SDIPIN WING_A_3
@@ -15,8 +17,12 @@
 #define SDOPIN WING_A_1
 
 //Sigma-delta DAC pins, PPS and register definitions
-#define SDCH0  WING_C_0
+#define DAC_CH0  WING_C_0
+#define DAC_EMPTY  WING_C_1
+#define DAC_FULL  WING_C_2
 #define DAC_PPS_NUM 7
+#define DAC_PPS_EMPTY 8
+#define DAC_PPS_FULL 9
 #define DAC_B 8
 #define DAC_DATA REGISTER(IO_SLOT(DAC_B),0)
 #define DAC_CTRL REGISTER(IO_SLOT(DAC_B),1)
@@ -30,23 +36,28 @@
 File sdFile;
 
 //Audio file definitions
-unsigned int sample_freq = 16000;
-char wav_file[512] = "t1616.wav";
+unsigned int sample_freq = 44100;
+char wav_file[512] = "t1644.wav";
 int sample_is16bit = 1;
 
 /* Interrupt handler:
- * Called by the HDL audio buffer drops below 50% full
+ * Called when the HDL audio buffer drops below 50% full
  */
 void _zpu_interrupt ()
 {
+   int16_t sample;
+   
    //While buffer isn't full, pass another sample
     while(!(DAC_CTRL&1)){
       
-      int16_t sample = sdFile.read();
+      /*Doing this over a simpler sdFile.read() allows for a single call
+        to fetch all of the sample at once and the rest of the processing
+        is done in hardware (configured using the DAC_CTRL register) */     
       if(sample_is16bit)
-        sample |= sdFile.read()<<8;
-        
-      DAC_DATA = sample;
+        sdFile.read((void *)&sample,2);
+      else
+        sdFile.read((void *)&sample,1);
+      DAC_DATA = sample; 
     }
 }
 
@@ -54,18 +65,27 @@ void _zpu_interrupt ()
 void init_dac()
 {
    //Set up PPS for DAC peripheral
-   pinMode (SDCH0 , OUTPUT );
-   pinModePPS (SDCH0 , HIGH );
-   outputPinForFunction (SDCH0 , DAC_PPS_NUM);
+   pinMode (DAC_CH0 , OUTPUT );
+   pinModePPS (DAC_CH0 , HIGH );
+   outputPinForFunction (DAC_CH0 , DAC_PPS_NUM);
+   
+   //Debugging buffer full/empty LEDS
+   #ifdef DEBUG
+     pinMode (DAC_EMPTY , OUTPUT );
+     pinModePPS (DAC_EMPTY , HIGH );
+     outputPinForFunction (DAC_EMPTY , DAC_PPS_EMPTY);
+     pinMode (DAC_FULL , OUTPUT );
+     pinModePPS (DAC_FULL , HIGH );
+     outputPinForFunction (DAC_FULL , DAC_PPS_FULL);
+   #endif
    
    //Set sample frequency of the DAC
    unsigned frequency = sample_freq;
-   uint32_t ctrl_reg =( ( (CLK_FREQ) / frequency ) - 1 )<<16;
-   ctrl_reg |= DAC_OP_isBIGEND;
+   uint32_t ctrl_reg =( ( (CLK_FREQ) / frequency ) - 1 )<<16; // Define frequency
    if(sample_is16bit)
-     ctrl_reg |= DAC_OP_is16W | DAC_OP_isSIGNED;
+     ctrl_reg |= DAC_OP_is16W | DAC_OP_isSIGNED; // Define 16 bit sample options
    
-   DAC_CTRL = ctrl_reg; // Set to sampling frequency
+   DAC_CTRL = ctrl_reg; // Push DAC control options to register
 }
 
 /* Setup for SD card using SPI (See SD.h examples)
@@ -100,9 +120,7 @@ int init_sd()
    return 1;
 }
 
-/* Initializes the ZPU interrupt registers
- * to provide an acurate PCM request interrupt
- */
+// Initializes the ZPU interrupt registers
 void init_interrupts()
 {
   // Enable buffered dac's interrupt then globally enable interrupts
@@ -121,7 +139,7 @@ void setup()
       sdFile = SD.open(wav_file);
   
      if (sdFile) {
-       Serial.println("Opened file fine");
+       Serial.println("Opened file OK");
         
         // Waste first 80 bytes (header data - not interested during initial testing)
         for(int i=0;i<80;i++)
@@ -129,8 +147,9 @@ void setup()
        
        //Fill the buffer before we start 
        _zpu_interrupt();
-       Serial.println("Done pre-filling");
-     }
+       Serial.println("Finished pre-filling buffer");
+     } else
+       Serial.println("Error opening file.");
   }
   
   /* Init buffered DAC peripheral

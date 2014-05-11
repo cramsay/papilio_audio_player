@@ -82,7 +82,8 @@ architecture behave of papilio_one_top is
     wb_inta_o:out std_logic;
 
     -- Connection to GPIO pin
-    pcm_out: out std_logic_vector(1 downto 0)
+    pcm_out: out std_logic_vector(1 downto 0);
+    empty,full: out std_logic
   );
   end component buffered_sigmadelta;
 
@@ -174,7 +175,9 @@ architecture behave of papilio_one_top is
 
 --  signal io_device_ack: std_logic;
 
-signal pcm_out_pps : std_logic_vector(1 downto 0);
+  -- Buffered DAC top level signals
+  signal pcm_out_pps : std_logic_vector(1 downto 0);
+  signal dac_empty_pps,dac_full_pps: std_logic;
 
   signal spi_pf_miso: std_logic;
   signal spi_pf_mosi: std_logic;
@@ -525,7 +528,7 @@ begin
 
   mysigdelta_inst: buffered_sigmadelta
   port map (
-    wb_clk_i       => wb_clk_i,
+    wb_clk_i       => wb_clk_i,     --Wishbone signals...
     wb_rst_i    => wb_rst_i,
     wb_dat_o      => slot_read(8),
     wb_dat_i     => slot_write(8),
@@ -535,7 +538,9 @@ begin
     wb_stb_i        => slot_stb(8),
     wb_ack_o      => slot_ack(8),
     wb_inta_o => slot_interrupt(8),
-    pcm_out  => pcm_out_pps
+    pcm_out  => pcm_out_pps,        --Audio line out
+    empty => dac_empty_pps,         --Buffer empty flag (for debugging)
+    full => dac_full_pps            --Buffer full flag (for debugging)
   );
 
   --
@@ -750,9 +755,11 @@ begin
     gpio_spp_data(4) <= spi2_sck;               -- PPS4 : USPI SCK
     gpio_spp_data(5) <= sigmadelta_spp_data(1); -- PPS5 : SIGMADELTA1 DATA
     gpio_spp_data(6) <= uart2_tx;               -- PPS6 : UART2 DATA
-	gpio_spp_data(7) <= pcm_out_pps(0);
+    gpio_spp_data(7) <= pcm_out_pps(0);         -- PPS7 : DAC line out
+    gpio_spp_data(8) <= dac_empty_pps;          -- PPS8 : DAC empty buffer flag
+    gpio_spp_data(9) <= dac_full_pps;           -- PPS9 : DAC full buffer flag
     spi2_miso <= gpio_spp_read(0);              -- PPS0 : USPI MISO
-    uart2_rx <= gpio_spp_read(1);              -- PPS0 : USPI MISO
+    uart2_rx <= gpio_spp_read(1);               -- PPS0 : USPI MISO
 
   end process;
 
