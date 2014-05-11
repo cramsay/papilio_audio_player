@@ -36,16 +36,17 @@
 File sdFile;
 
 //Audio file definitions
-unsigned int sample_freq = 44100;
-char wav_file[512] = "t1644.wav";
-int sample_is16bit = 1;
+uint32_t sample_freq;
+uint16_t channels;
+uint16_t sample_width;
+char wav_file[512] = "t1632.wav";
 
 /* Interrupt handler:
  * Called when the HDL audio buffer drops below 50% full
  */
 void _zpu_interrupt ()
 {
-   int16_t sample;
+   uint16_t sample;
    
    //While buffer isn't full, pass another sample
     while(!(DAC_CTRL&1)){
@@ -53,10 +54,7 @@ void _zpu_interrupt ()
       /*Doing this over a simpler sdFile.read() allows for a single call
         to fetch all of the sample at once and the rest of the processing
         is done in hardware (configured using the DAC_CTRL register) */     
-      if(sample_is16bit)
-        sdFile.read((void *)&sample,2);
-      else
-        sdFile.read((void *)&sample,1);
+      sdFile.read((void *)&sample,sample_width>>3);
       DAC_DATA = sample; 
     }
 }
@@ -82,7 +80,7 @@ void init_dac()
    //Set sample frequency of the DAC
    unsigned frequency = sample_freq;
    uint32_t ctrl_reg =( ( (CLK_FREQ) / frequency ) - 1 )<<16; // Define frequency
-   if(sample_is16bit)
+   if(sample_width==16)
      ctrl_reg |= DAC_OP_is16W | DAC_OP_isSIGNED; // Define 16 bit sample options
    
    DAC_CTRL = ctrl_reg; // Push DAC control options to register
@@ -141,9 +139,20 @@ void setup()
      if (sdFile) {
        Serial.println("Opened file OK");
         
-        // Waste first 80 bytes (header data - not interested during initial testing)
-        for(int i=0;i<80;i++)
-          sdFile.read();
+        //Read file header
+        char header[44];
+        sdFile.read((void*)&header,sizeof header/sizeof header[0]);
+        
+        channels=header[22]|(header[23]<<8);
+        sample_width=header[34]|(header[35]<<8);
+        sample_freq=header[24]|(header[25]<<8)|(header[26]<<16)|(header[27]<<24);
+        
+        Serial.print("Channels : ");
+        Serial.println(channels);
+        Serial.print("Bits per sample :");
+        Serial.println(sample_width);
+        Serial.print("Sample freq : ");
+        Serial.println(sample_freq);       
        
        //Fill the buffer before we start 
        _zpu_interrupt();
