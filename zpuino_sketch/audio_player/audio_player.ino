@@ -39,23 +39,34 @@ File sdFile;
 uint32_t sample_freq;
 uint16_t channels;
 uint16_t sample_width;
-char wav_file[512] = "t1632.wav";
+char wav_file[512] = "lau.wav";
+uint8_t samples[512];
+int s_count=0;
+int s_index=0;
 
 /* Interrupt handler:
  * Called when the HDL audio buffer drops below 50% full
  */
 void _zpu_interrupt ()
 {
-   uint16_t sample;
+   uint32_t sample;
    
    //While buffer isn't full, pass another sample
     while(!(DAC_CTRL&1)){
       
+      //Read more samples if needed
+      if(s_index>=s_count){
+        s_count=sdFile.read(samples,8);
+        s_index=0;
+      }
+      
       /*Doing this over a simpler sdFile.read() allows for a single call
         to fetch all of the sample at once and the rest of the processing
-        is done in hardware (configured using the DAC_CTRL register) */     
-      sdFile.read((void *)&sample,sample_width>>3);
-      DAC_DATA = sample; 
+        is done in hardware (configured using the DAC_CTRL register) */ 
+      sample=0; 
+      for(int start_i=s_index;s_index<start_i+((sample_width*channels)>>3); s_index++)   
+        sample =  sample<<8 | samples[s_index];
+      DAC_DATA = sample;
     }
 }
 
