@@ -52,7 +52,7 @@ File sdFile;
 uint32_t sample_freq;
 uint16_t channels;
 uint16_t sample_width;
-char wav_file[512] = "lau.wav";
+char wav_file[512] = "red.wav";
 
 //SD card buffer
 uint8_t samples[512]; // Actual buffered data
@@ -120,6 +120,98 @@ int init_sd()
    return 1;
 }
 
+/* Recurse through filesystem and call play()
+ * on all wav files.
+ */
+void playAll(File dir) {
+   while(true) {
+     
+     File entry =  dir.openNextFile();
+     if (! entry) {
+       // no more files
+       Serial.println("No more files.");
+       break;
+     }
+     if (entry.isDirectory()) {
+       playAll(entry);
+     } else {
+       Serial.print(entry.name());
+       play(entry);
+     }
+     entry.close();
+   }
+}
+
+/* Play though an entire wav file
+ */
+void play(File file){
+   if (file) {
+     Serial.println("Opened file OK");
+      
+      //Read file header
+      s_count=file.read((void*)samples,512);
+      s_index=44; //Set offset to start of actual data so we don't play
+      
+      channels=samples[22]|(samples[23]<<8);
+      sample_width=samples[34]|(samples[35]<<8);
+      sample_freq=samples[24]|(samples[25]<<8)|(samples[26]<<16)|(samples[27]<<24);
+      
+      Serial.print("Channels : ");
+      Serial.println(channels);
+      Serial.print("Bits per sample :");
+      Serial.println(sample_width);
+      Serial.print("Sample freq : ");
+      Serial.println(sample_freq);       
+      
+      //Do format checks
+      int supported_fmt=1;
+      if(sample_width!=8 && sample_width!=16){
+        Serial.println("Unsupported sample width");
+        supported_fmt=0;
+      } else if(sample_freq>44100){
+        Serial.println("Too high a sample rate");
+        supported_fmt=0;
+      } else if(channels>2){
+        Serial.println("Too many channels");
+        supported_fmt=0;
+      } 
+      //Quit if not supported
+      if (!supported_fmt)
+        return;
+      
+      // Setup DAC & buffer with bits per sample, sample frequency, etc.
+      init_dac();
+      
+      //Read through the whole file
+      while(file.available()){
+        uint32_t sample;
+         
+       //While buffer isn't full, pass another sample
+        while(!DAC_FULL){
+        
+          //Read more samples if needed
+          if(s_index>=s_count){
+            s_count=file.read(samples,512); // # Bytes to read is a trade-off between # reads and time for each read - to keep buffer happy.
+            s_index=0;
+          }
+          
+          //Warn about empty buffer ocurrences!
+          #ifdef DEBUG
+          if(DAC_EMPTY)
+            Serial.println("Buffer emptied! Expected upon cold start");
+          #endif
+          
+          sample=0;
+          for(int start_i=s_index;s_index<start_i+((sample_width*channels)>>3); s_index++)   
+            sample =  sample<<8 | samples[s_index];
+          DAC_DATA = sample;
+        }
+      }
+      
+   } else
+     Serial.println("Error opening file.");
+}
+
 void setup()
 {
  // Open serial communications and wait for port to open:
@@ -128,57 +220,17 @@ void setup()
   
   if(init_sd()){
       // Open the file for reading:
-      sdFile = SD.open(wav_file);
-  
-     if (sdFile) {
-       Serial.println("Opened file OK");
-        
-        //Read file header
-        s_count=sdFile.read((void*)samples,512);
-        s_index=44; //Set offset to start of actual data so we don't play
-        
-        channels=samples[22]|(samples[23]<<8);
-        sample_width=samples[34]|(samples[35]<<8);
-        sample_freq=samples[24]|(samples[25]<<8)|(samples[26]<<16)|(samples[27]<<24);
-        
-        Serial.print("Channels : ");
-        Serial.println(channels);
-        Serial.print("Bits per sample :");
-        Serial.println(sample_width);
-        Serial.print("Sample freq : ");
-        Serial.println(sample_freq);       
-       
-     } else
-       Serial.println("Error opening file.");
+      sdFile = SD.open("/");
+      playAll(sdFile);
+
   }
  
-  /* Init buffered DAC peripheral
-     This is done after reading wav file samples as encoding types effect options sent with
-     dac init */
   init_dac();
 
 }
 
 void loop()
 {
-   uint32_t sample;
-     
-   //While buffer isn't full, pass another sample
-    while(!DAC_FULL){
-    
-      //Read more samples if needed
-      if(s_index>=s_count){
-        s_count=sdFile.read(samples,512); // # Bytes to read is a trade-off between # reads and time for each read - to keep buffer happy.
-        s_index=0;
-      }
-      
-     if(DAC_EMPTY)
-       Serial.println("Buffer emptied! Expected upon cold start");
-    
-    sample=0;
-    for(int start_i=s_index;s_index<start_i+((sample_width*channels)>>3); s_index++)   
-      sample =  sample<<8 | samples[s_index];
-    DAC_DATA = sample;
-  }
+  
 }
 
