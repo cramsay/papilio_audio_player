@@ -24,11 +24,11 @@ However, it isn't too hard to do so. Just run the makefile in the zpuino-hdl dir
 to flash the bitfile to your board straight away (if you have papilio-progs installed).
 
 ## Details of the custom ZPUino core
-There is one custom wishbone-compatible peripheral - a buffered DAC which sends an interrupt to the software
-to provide more samples when the buffer falls below 50% full. It has HDL level settings which are exposed 
+There is one custom wishbone-compatible peripheral - a buffered DAC. Data from the SD card is pushed to the buffer
+using a small C program. The core has HDL level settings for the DAC which are exposed 
 through the DAC_CTRL register. These include sample rate, sample width (8 or 16 bits), sample endian-ness
 and a flag for signed (2's complement) samples. The register is structured like so (bit numbers are in brackets)...  
-|(31) sample_timer (16)|(15) N/A (4)| signed (3)| endian (2)| width (1)| full (0)|
+|(31) sample_timer (16)|(15) N/A (5)| signed (4)| endian (3)| width (2)| empty (1)| full (0)|
 
  * **sample_time**
    * 16 bits - sets how many clock cycles are elapsed before switching to the next sample (determines sample rate)
@@ -40,6 +40,8 @@ and a flag for signed (2's complement) samples. The register is structured like 
    * 1 bit - 0=samples are little endian, 1=samples are big endian
  * **width**
    * 1 bit - 0=samples are 8 bits wide, 1=samples are 16 bits wide
+ * **empty**
+   * 1 bit (read only) - 1 when sample buffer is empty
  * **full**
    * 1 bit (read only) - 1 when sample buffer is full 
 
