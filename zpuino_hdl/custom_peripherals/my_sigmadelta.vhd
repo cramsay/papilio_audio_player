@@ -32,7 +32,7 @@ architecture behave of buffered_sigmadelta is
 
   component fifo_buf is
   generic (
-    bits: integer := 8;
+    bits: integer := 11;
     width: integer := 16
   );
   port (
@@ -42,8 +42,7 @@ architecture behave of buffered_sigmadelta is
     rd:       in std_logic;                           -- Read flag
     write:    in std_logic_vector(width-1 downto 0);  -- Write data
     read :    out std_logic_vector(width-1 downto 0); -- Read data
-    full:     out std_logic;                          -- Last 3 are state flags
-    refil:     out std_logic;
+    full:     out std_logic;                          -- Last 2 are state flags
     empty:    out std_logic
   );
   end component;
@@ -63,6 +62,7 @@ architecture behave of buffered_sigmadelta is
   signal fifo_rd:        std_logic:='0';
   signal fifo_write:     std_logic_vector(15 downto 0):=(others=>'0');
   signal fifo_full:      std_logic:='0';
+  signal fifo_empty:     std_logic:='0';
 
 begin
 
@@ -75,18 +75,19 @@ begin
     write=>fifo_write,
     read=>pcm_data,
     full=>fifo_full,
-    refil=>wb_inta_o,
-    empty=>empty
-          );
+    empty=>fifo_empty
+  );
   
   wb_ack_o <= ack;
   full<=fifo_full;
+  empty<=fifo_empty;
 
   -- Always show CTRL register on wb_dat_o
   wb_dat_o(0) <= fifo_full;
-  wb_dat_o(1) <= sample_16w;
-  wb_dat_o(2) <= sample_endian;
-  wb_dat_o(3) <= sample_signed;
+  wb_dat_o(1) <= fifo_empty;
+  wb_dat_o(2) <= sample_16w;
+  wb_dat_o(3) <= sample_endian;
+  wb_dat_o(4) <= sample_signed;
   wb_dat_o(31 downto 16) <= sample_count;
 
   -- Line out is overflow from DAC running sum
@@ -94,7 +95,6 @@ begin
 
   -- Wishbone servicing process
   wb_proc : process(wb_clk_i)
-
   begin
     if rising_edge(wb_clk_i) then
                   
@@ -127,9 +127,9 @@ begin
                 fifo_wr<='1';
 
               when "01" => --Control register
-                sample_16w<=wb_dat_i(1);
-                sample_endian<=wb_dat_i(2);
-                sample_signed<=wb_dat_i(3);
+                sample_16w<=wb_dat_i(2);
+                sample_endian<=wb_dat_i(3);
+                sample_signed<=wb_dat_i(4);
                 sample_count<=wb_dat_i(31 downto 16);
 
               when others =>
@@ -168,4 +168,3 @@ begin
   end process;
 
 end behave;
-

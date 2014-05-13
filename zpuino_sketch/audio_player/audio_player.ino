@@ -4,6 +4,15 @@
   Requires a system a custom ZPUino variant (included in the git repo)
   
   For all the ZPU reg names see http://www.alvie.com/zpuino/downloads/zpuino-1.0.pdf
+  
+  # Note about SD card reads and buffering:
+  ----------------------------------------
+  Initially I was aiming to perform all the buffering just infront of the DAC (in VHDL)
+  but then I learned that the SD card reads are performed in 512 byte blocks. So there is also
+  a 512 byte buffer in software as the data must be sent to the hardware in 32-bit words (max.)
+  using ZPUino. So, I talk about bufferring in the code, it could be the harware FIFO buffer *or*
+  the uint8_t array! Watch out.
+  
  */
  
 #include <SD.h>
@@ -18,8 +27,8 @@
 
 //Sigma-delta DAC pins, PPS and register definitions
 #define DAC_CH0  WING_C_0
-#define DAC_EMPTY  WING_C_1
-#define DAC_FULL  WING_C_2
+#define DAC_PIN_EMPTY  WING_C_1
+#define DAC_PIN_FULL  WING_C_2
 #define DAC_PPS_NUM 7
 #define DAC_PPS_EMPTY 8
 #define DAC_PPS_FULL 9
@@ -29,9 +38,13 @@
 
 //DAC control options
 #define DAC_OP_isFULL 0x1
-#define DAC_OP_is16W 0x2
-#define DAC_OP_isBIGEND 0x4
-#define DAC_OP_isSIGNED 0x8
+#define DAC_OP_isEMPTY 0x2
+#define DAC_OP_is16W 0x4
+#define DAC_OP_isBIGEND 0x8
+#define DAC_OP_isSIGNED 0x10
+
+#define DAC_FULL (DAC_CTRL & DAC_OP_isFULL)
+#define DAC_EMPTY (DAC_CTRL & DAC_OP_isEMPTY) 
 
 File sdFile;
 
@@ -40,35 +53,11 @@ uint32_t sample_freq;
 uint16_t channels;
 uint16_t sample_width;
 char wav_file[512] = "lau.wav";
-uint8_t samples[512];
-int s_count=0;
-int s_index=0;
 
-/* Interrupt handler:
- * Called when the HDL audio buffer drops below 50% full
- */
-void _zpu_interrupt ()
-{
-   uint32_t sample;
-   
-   //While buffer isn't full, pass another sample
-    while(!(DAC_CTRL&1)){
-      
-      //Read more samples if needed
-      if(s_index>=s_count){
-        s_count=sdFile.read(samples,8);
-        s_index=0;
-      }
-      
-      /*Doing this over a simpler sdFile.read() allows for a single call
-        to fetch all of the sample at once and the rest of the processing
-        is done in hardware (configured using the DAC_CTRL register) */ 
-      sample=0; 
-      for(int start_i=s_index;s_index<start_i+((sample_width*channels)>>3); s_index++)   
-        sample =  sample<<8 | samples[s_index];
-      DAC_DATA = sample;
-    }
-}
+//SD card buffer
+uint8_t samples[512]; // Actual buffered data
+int s_count=0;        // # bytes in buffer
+int s_index=0;        // # current index in buffer
 
 // Setup for sigma-delta DAC (wishbone peripheral)
 void init_dac()
@@ -80,12 +69,12 @@ void init_dac()
    
    //Debugging buffer full/empty LEDS
    #ifdef DEBUG
-     pinMode (DAC_EMPTY , OUTPUT );
-     pinModePPS (DAC_EMPTY , HIGH );
-     outputPinForFunction (DAC_EMPTY , DAC_PPS_EMPTY);
-     pinMode (DAC_FULL , OUTPUT );
-     pinModePPS (DAC_FULL , HIGH );
-     outputPinForFunction (DAC_FULL , DAC_PPS_FULL);
+     pinMode (DAC_PIN_EMPTY , OUTPUT );
+     pinModePPS (DAC_PIN_EMPTY , HIGH );
+     outputPinForFunction (DAC_PIN_EMPTY , DAC_PPS_EMPTY);
+     pinMode (DAC_PIN_FULL , OUTPUT );
+     pinModePPS (DAC_PIN_FULL , HIGH );
+     outputPinForFunction (DAC_PIN_FULL , DAC_PPS_FULL);
    #endif
    
    //Set sample frequency of the DAC
@@ -93,6 +82,8 @@ void init_dac()
    uint32_t ctrl_reg =( ( (CLK_FREQ) / frequency ) - 1 )<<16; // Define frequency
    if(sample_width==16)
      ctrl_reg |= DAC_OP_is16W | DAC_OP_isSIGNED; // Define 16 bit sample options
+   else if(sample_width==8)
+     ctrl_reg |= DAC_OP_isBIGEND;
    
    DAC_CTRL = ctrl_reg; // Push DAC control options to register
 }
@@ -129,14 +120,6 @@ int init_sd()
    return 1;
 }
 
-// Initializes the ZPU interrupt registers
-void init_interrupts()
-{
-  // Enable buffered dac's interrupt then globally enable interrupts
-  INTRMASK = _BV(DAC_B);
-  INTRCTL = 1;
-}
-  
 void setup()
 {
  // Open serial communications and wait for port to open:
@@ -151,12 +134,12 @@ void setup()
        Serial.println("Opened file OK");
         
         //Read file header
-        char header[44];
-        sdFile.read((void*)&header,sizeof header/sizeof header[0]);
+        s_count=sdFile.read((void*)samples,512);
+        s_index=44; //Set offset to start of actual data so we don't play
         
-        channels=header[22]|(header[23]<<8);
-        sample_width=header[34]|(header[35]<<8);
-        sample_freq=header[24]|(header[25]<<8)|(header[26]<<16)|(header[27]<<24);
+        channels=samples[22]|(samples[23]<<8);
+        sample_width=samples[34]|(samples[35]<<8);
+        sample_freq=samples[24]|(samples[25]<<8)|(samples[26]<<16)|(samples[27]<<24);
         
         Serial.print("Channels : ");
         Serial.println(channels);
@@ -165,22 +148,37 @@ void setup()
         Serial.print("Sample freq : ");
         Serial.println(sample_freq);       
        
-       //Fill the buffer before we start 
-       _zpu_interrupt();
-       Serial.println("Finished pre-filling buffer");
      } else
        Serial.println("Error opening file.");
   }
-  
+ 
   /* Init buffered DAC peripheral
-     This is done after reading wav file header as encoding types effect options sent with
+     This is done after reading wav file samples as encoding types effect options sent with
      dac init */
   init_dac();
-  //Enable interrupts and start playing.
-  init_interrupts();
+
 }
 
 void loop()
 {
+   uint32_t sample;
+     
+   //While buffer isn't full, pass another sample
+    while(!DAC_FULL){
+    
+      //Read more samples if needed
+      if(s_index>=s_count){
+        s_count=sdFile.read(samples,512); // # Bytes to read is a trade-off between # reads and time for each read - to keep buffer happy.
+        s_index=0;
+      }
+      
+     if(DAC_EMPTY)
+       Serial.println("Buffer emptied! Expected upon cold start");
+    
+    sample=0;
+    for(int start_i=s_index;s_index<start_i+((sample_width*channels)>>3); s_index++)   
+      sample =  sample<<8 | samples[s_index];
+    DAC_DATA = sample;
+  }
 }
 

@@ -1,5 +1,4 @@
 -- Adapted from the zpuino_fifo
--- Signals a refil flag once x% empty
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -19,7 +18,6 @@ entity fifo_buf is
     write:    in std_logic_vector(width-1 downto 0);
     read :    out std_logic_vector(width-1 downto 0);
     full:     out std_logic;
-    refil:     out std_logic;
     empty:    out std_logic
   );
 end entity fifo_buf;
@@ -80,11 +78,6 @@ begin
 
       full <= full_v;
       empty <= empty_v;
-
-      refil <= '0';
-      if count_v <= (2**bits)/2 then
-        refil <='1';
-      end if;
 
     end if;
 
