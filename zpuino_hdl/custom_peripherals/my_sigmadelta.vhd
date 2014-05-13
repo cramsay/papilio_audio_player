@@ -32,7 +32,7 @@ architecture behave of buffered_sigmadelta is
 
   component fifo_buf is
   generic (
-    bits: integer := 11;
+    bits: integer := 7;
     width: integer := 16
   );
   port (
