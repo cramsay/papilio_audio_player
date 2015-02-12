@@ -1,10 +1,20 @@
 papilio_audio_player
 ====================
 
-A wav audio player system-on-a-chip using a Papilio one board and ZPUino core.
+A wav audio player using a Papilio one board (Spartan3E) and ZPUino core.
+The source code is available through my [github page](https://github.com/cramsay/papilio_audio_player).
+
+The system can read a mono wav file of variable sample frequencies from a microSD card.
+The wav files are then played using a delta-sigma DAC (with some built-in buffering).
+The DAC is implemented as a wishbone bus peripheral in order to communicate with the ZPU
+core.
+
+Although I'm still pleased with the knowledge I picked up during this project,
+the reader should keep in mind that it was very much a passion project.
+As such, the documentation may be incomplete in patches.
 
 ## Configuration / Installation
-As it stands the external hardware is simply a micro-SD card using SPI and a single speaker channel. Papilio pins are :
+As it stands the external hardware is simply a microSD card using SPI and a single speaker channel. Papilio pins are :
 * **A1** - SD MISO
 * **A2** - SD SCK
 * **A3** - SD MOSI
@@ -24,7 +34,7 @@ However, it isn't too hard to do so. Just run the makefile in the zpuino-hdl dir
 to flash the bitfile to your board straight away (if you have papilio-progs installed).
 
 ## Details of the custom ZPUino core
-There is one custom wishbone-compatible peripheral - a buffered DAC. Data from the SD card is pushed to the buffer
+There is one custom wishbone-compatible peripheral - a buffered delta-sigma DAC. Data from the SD card is pushed to the buffer
 using a small C program. The core has HDL level settings for the DAC which are exposed 
 through the DAC_CTRL register. These include sample rate, sample width (8 or 16 bits), sample endian-ness
 and a flag for signed (2's complement) samples. The register is structured like so (bit numbers are in brackets)...  
@@ -35,7 +45,7 @@ and a flag for signed (2's complement) samples. The register is structured like 
  * **N/A**
    * Completely useless. Doesn't control anything as of yet.
  * **signed**
-   * 1 bit - 0=samples are unsigned, 1=samples are signed using 2's copmlement
+   * 1 bit - 0=samples are unsigned, 1=samples are signed using 2's complement
  * **endian**
    * 1 bit - 0=samples are little endian, 1=samples are big endian
  * **width**
